@@ -9,11 +9,13 @@ module.exports = {
     
     // Set modular presence activity status
     client.user.setPresence({
-      activities: [{ 
-        name: '/task and /meet', 
-        type: ActivityType.Listening 
-      }],
       status: 'online',
+      activities: [
+        {
+          name: 'Managing muLearn SBC',
+          type: ActivityType.Watching
+        }
+      ]
     });
   },
 };
