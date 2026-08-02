@@ -7,7 +7,7 @@ Lahel Vakkachan is a modular, production-ready Discord bot designed for student 
 - **⏰ Smart Reminder System**: Automatically ping assigned users and roles two days before deadlines, daily after deadlines (if overdue), and escalate unresolved overdue tasks to team leaders.
 - **⚙️ Server Setup (`/setup`)**: Configure administrator, team leader, and member roles alongside default notification channels, storing configurations in MongoDB.
 - **👥 Team Management**: Build sub-teams, add/remove members, and list configurations.
-- **📅 Meeting Scheduling (`/meet`)**: Instantly schedule meetings, create Google Calendar events, generate Google Meet links, and handle reminders (1d, 1h, 10m before start).
+- **📅 Meeting Scheduling (`/meet`)**: Schedule (`create`), update (`edit`), delete (`cancel`), and trace (`list`) team meetings with full Google Calendar event & Google Meet link generations. Reminders are sent 1d, 1h, and 10m before start.
 - **📊 Metric Dashboard**: Run `/dashboard` to query metrics on pending, completed, overdue tasks, and upcoming meetings.
 - **📈 Automated Reports**: Schedules cron jobs for daily summaries, weekly productivity stats, and monthly overviews.
 - **⚡ System Utilities**:

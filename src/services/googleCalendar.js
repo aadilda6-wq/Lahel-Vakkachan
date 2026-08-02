@@ -126,7 +126,58 @@ async function deleteMeetingEvent(eventId) {
   }
 }
 
+/**
+ * Updates an existing Google Calendar event.
+ * @param {string} eventId Event identifier
+ * @param {string} title New meeting title (optional)
+ * @param {string} description New meeting description (optional)
+ * @param {Date} startTime New start time (optional)
+ * @param {Date} endTime New end time (optional)
+ * @returns {Promise<boolean>} Success status
+ */
+async function updateMeetingEvent(eventId, title, description, startTime, endTime) {
+  if (!calendar) {
+    logger.warn('Google Calendar API not configured. Mock update operation succeeded.');
+    return true;
+  }
+
+  if (eventId.startsWith('mock-')) {
+    logger.info(`Mock meeting update handled for ${eventId}`);
+    return true;
+  }
+
+  const resource = {};
+  if (title) resource.summary = title;
+  if (description) resource.description = description;
+  if (startTime) {
+    resource.start = {
+      dateTime: startTime.toISOString(),
+      timeZone: 'UTC',
+    };
+  }
+  if (endTime) {
+    resource.end = {
+      dateTime: endTime.toISOString(),
+      timeZone: 'UTC',
+    };
+  }
+
+  try {
+    await calendar.events.patch({
+      calendarId: config.google.calendarId,
+      eventId: eventId,
+      resource: resource,
+    });
+    logger.info(`Updated Google Calendar event. Event ID: ${eventId}`);
+    return true;
+  } catch (error) {
+    logger.error(`Error updating Google Calendar event ${eventId}:`, error);
+    throw error;
+  }
+}
+
 module.exports = {
   createMeetingEvent,
-  deleteMeetingEvent
+  deleteMeetingEvent,
+  updateMeetingEvent
 };
