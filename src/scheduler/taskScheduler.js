@@ -18,7 +18,7 @@ function initTaskScheduler(client) {
 }
 
 async function checkTaskDeadlines(client) {
-  const tasks = await Task.find({ status: { $ne: 'Completed' } });
+  const tasks = await Task.find({ status: { $in: ['Pending', 'In Progress', 'Overdue'] } });
   const now = new Date();
 
   for (const task of tasks) {

@@ -20,7 +20,11 @@ async function checkMeetingReminders(client) {
   const now = new Date();
   
   // Find meetings starting in the future
-  const meetings = await Meeting.find({ startTime: { $gt: now } });
+  // Find meetings starting in the future, up to 24 hours from now (leveraging startTime index)
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const meetings = await Meeting.find({ 
+    startTime: { $gt: now, $lte: tomorrow } 
+  });
 
   for (const meeting of meetings) {
     try {

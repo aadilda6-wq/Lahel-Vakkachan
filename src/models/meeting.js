@@ -43,4 +43,7 @@ const meetingSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Indexes for optimized query execution
+meetingSchema.index({ startTime: 1 });
+
 module.exports = mongoose.model('Meeting', meetingSchema);

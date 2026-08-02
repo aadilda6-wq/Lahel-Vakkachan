@@ -6,6 +6,7 @@ const { connectDatabase } = require('./src/database/database');
 const { initTaskScheduler } = require('./src/scheduler/taskScheduler');
 const { initMeetingScheduler } = require('./src/scheduler/meetingScheduler');
 const { initReportScheduler } = require('./src/scheduler/reportScheduler');
+const { initCleanupScheduler } = require('./src/scheduler/cleanupScheduler');
 const logger = require('./src/utils/logger');
 
 // Initialize Discord client with correct intents (Guilds only to avoid disallowed intents error)
@@ -55,6 +56,7 @@ for (const file of eventFiles) {
     initTaskScheduler(client);
     initMeetingScheduler(client);
     initReportScheduler(client);
+    initCleanupScheduler();
 
     // 3. Start a dummy HTTP server for health checks on Render/Railway if PORT is provided
     const port = config.app.port || process.env.PORT;
