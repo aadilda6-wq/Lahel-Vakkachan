@@ -26,6 +26,12 @@ module.exports = {
         )
         .addUserOption(opt => opt.setName('assignee-user').setDescription('Assign task to a user'))
         .addRoleOption(opt => opt.setName('assignee-role').setDescription('Assign task to a Discord role'))
+        .addIntegerOption(opt =>
+          opt.setName('reminder-interval')
+            .setDescription('Reminder interval in days (optional)')
+            .setRequired(false)
+            .setMinValue(1)
+        )
     )
     .addSubcommand(sub =>
       sub.setName('update')
@@ -51,6 +57,12 @@ module.exports = {
             )
         )
         .addStringOption(opt => opt.setName('progress-note').setDescription('Add a progress note to the task'))
+        .addIntegerOption(opt =>
+          opt.setName('reminder-interval')
+            .setDescription('Update reminder interval in days (optional, 0 to clear)')
+            .setRequired(false)
+            .setMinValue(0)
+        )
     )
     .addSubcommand(sub =>
       sub.setName('complete')
@@ -141,6 +153,7 @@ module.exports = {
         const deadlineStr = interaction.options.getString('deadline');
         const assigneeUser = interaction.options.getUser('assignee-user');
         const assigneeRole = interaction.options.getRole('assignee-role');
+        const reminderInterval = interaction.options.getInteger('reminder-interval') || null;
 
         const deadline = new Date(deadlineStr);
         if (isNaN(deadline.getTime())) {
@@ -169,6 +182,7 @@ module.exports = {
           assignees,
           guildId,
           creatorId: interaction.user.id,
+          reminderIntervalDays: reminderInterval,
           history: [{
             action: 'Task Created',
             performedBy: interaction.user.id,
@@ -212,6 +226,7 @@ module.exports = {
         const newStatus = interaction.options.getString('status');
         const newPriority = interaction.options.getString('priority');
         const progressNote = interaction.options.getString('progress-note');
+        const newReminderInterval = interaction.options.getInteger('reminder-interval');
 
         const task = await Task.findOne({ _id: taskId, guildId });
         if (!task) {
@@ -237,6 +252,15 @@ module.exports = {
         if (newPriority && task.priority !== newPriority) {
           changes.push(`Priority: ${task.priority} ➔ ${newPriority}`);
           task.priority = newPriority;
+        }
+
+        if (newReminderInterval !== null) {
+          const oldVal = task.reminderIntervalDays;
+          const newVal = newReminderInterval === 0 ? null : newReminderInterval;
+          if (oldVal !== newVal) {
+            changes.push(`Reminder Interval: ${oldVal ? `Every ${oldVal} days` : 'None'} ➔ ${newVal ? `Every ${newVal} days` : 'None'}`);
+            task.reminderIntervalDays = newVal;
+          }
         }
 
         if (progressNote) {
@@ -349,6 +373,15 @@ module.exports = {
           return interaction.reply({ content: '❌ Task not found.', ephemeral: true });
         }
 
+        let reminderText = 'None';
+        if (task.status === 'Completed') {
+          reminderText = 'No Reminders (Completed)';
+        } else if (task.status === 'Overdue') {
+          reminderText = 'Daily Reminder Active';
+        } else if (task.reminderIntervalDays) {
+          reminderText = `Every ${task.reminderIntervalDays} days`;
+        }
+
         const embed = new EmbedBuilder()
           .setTitle(`📋 Task Details`)
           .setDescription(`**${task.title}**\n\n${task.description || '*No description*'}`)
@@ -358,6 +391,7 @@ module.exports = {
             { name: 'Status', value: task.status, inline: true },
             { name: 'Priority', value: task.priority, inline: true },
             { name: 'Deadline', value: task.deadline.toDateString(), inline: true },
+            { name: 'Reminder', value: reminderText, inline: true },
             { name: 'Assignee(s)', value: task.assignees.map(a => a.type === 'user' ? `<@${a.id}>` : `<@&${a.id}>`).join(', ') || 'Unassigned' }
           );
 

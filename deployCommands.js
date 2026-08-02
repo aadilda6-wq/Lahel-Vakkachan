@@ -4,6 +4,7 @@ const path = require('node:path');
 const config = require('./src/config/config');
 const logger = require('./src/utils/logger');
 
+// Load command data
 const commands = [];
 const commandsPath = path.join(__dirname, 'src/commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -24,26 +25,55 @@ if (!config.discord.token || !config.discord.clientId) {
   process.exit(1);
 }
 
-const rest = new REST().setToken(config.discord.token);
+const token = config.discord.token;
+const clientId = config.discord.clientId;
+const guildId = config.discord.guildId;
+const commandScope = (config.discord.commandScope || 'guild').toLowerCase();
+const isClean = process.argv.includes('--clean');
+
+if (commandScope === 'guild' && !guildId) {
+  logger.error('CRITICAL: COMMAND_SCOPE is set to "guild" but GUILD_ID is missing in configuration.');
+  process.exit(1);
+}
+
+const rest = new REST().setToken(token);
 
 (async () => {
   try {
-    logger.info(`Started refreshing ${commands.length} application (/) commands.`);
+    if (commandScope === 'guild') {
+      const route = Routes.applicationGuildCommands(clientId, guildId);
 
-    if (config.discord.guildId) {
-      logger.info(`Deploying commands locally to Guild ID: ${config.discord.guildId}`);
-      const data = await rest.put(
-        Routes.applicationGuildCommands(config.discord.clientId, config.discord.guildId),
-        { body: commands },
-      );
-      logger.info(`Successfully reloaded ${data.length} guild application (/) commands.`);
+      // Fetch existing commands to determine count for logging
+      let oldCommandCount = 0;
+      try {
+        const existing = await rest.get(route);
+        if (Array.isArray(existing)) {
+          oldCommandCount = existing.length;
+        }
+      } catch (err) {
+        logger.debug(`Could not fetch existing guild commands: ${err.message}`);
+      }
+
+      logger.info('✓ Removing stale guild commands...');
+      // Clean deployment deletes the current list first
+      await rest.put(route, { body: [] });
+      logger.info(`✓ Removed ${oldCommandCount} old commands.`);
+
+      logger.info(`✓ Registering ${commands.length} commands...`);
+      const data = await rest.put(route, { body: commands });
+      logger.info(`✓ Successfully deployed ${data.length} guild commands.`);
+    } else if (commandScope === 'global') {
+      const route = Routes.applicationCommands(clientId);
+
+      logger.info('✓ Removing stale global commands...');
+      // Clean deployment deletes the current list first
+      await rest.put(route, { body: [] });
+
+      const data = await rest.put(route, { body: commands });
+      logger.info(`✓ Successfully deployed ${data.length} global commands.`);
     } else {
-      logger.info('Deploying commands globally to Discord (may take up to 1 hour to register globally)...');
-      const data = await rest.put(
-        Routes.applicationCommands(config.discord.clientId),
-        { body: commands },
-      );
-      logger.info(`Successfully reloaded ${data.length} global application (/) commands.`);
+      logger.error(`CRITICAL: Invalid COMMAND_SCOPE "${commandScope}". Must be "guild" or "global".`);
+      process.exit(1);
     }
   } catch (error) {
     logger.error('Error occurred while deploying commands:', error);

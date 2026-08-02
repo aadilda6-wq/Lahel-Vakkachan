@@ -78,7 +78,13 @@ module.exports = {
       } else {
         highPriorityTasks.forEach(t => {
           const badge = t.priority === 'Critical' ? '🚨' : '🔥';
-          priorityText += `${badge} **${t.title}** (${t.status}) | Dead: \`${t.deadline.toLocaleDateString()}\`\n`;
+          let reminderInfo = '';
+          if (t.status === 'Overdue') {
+            reminderInfo = ' | 🔔 *Daily Reminder Active*';
+          } else if (t.reminderIntervalDays) {
+            reminderInfo = ` | 🔔 *Every ${t.reminderIntervalDays} days*`;
+          }
+          priorityText += `${badge} **${t.title}** (${t.status})${reminderInfo} | Dead: \`${t.deadline.toLocaleDateString()}\`\n`;
         });
       }
       embed.addFields({ name: '⚠️ High Priority & Critical Alerts', value: priorityText, inline: false });
@@ -90,7 +96,13 @@ module.exports = {
       } else {
         upcomingTasks.forEach(t => {
           const daysLeft = Math.ceil((t.deadline - new Date()) / (1000 * 60 * 60 * 24));
-          upcomingText += `• **${t.title}** - due in \`${daysLeft} days\` (${t.deadline.toLocaleDateString()})\n`;
+          let reminderInfo = '';
+          if (t.status === 'Overdue') {
+            reminderInfo = ' | 🔔 *Daily Reminder Active*';
+          } else if (t.reminderIntervalDays) {
+            reminderInfo = ` | 🔔 *Every ${t.reminderIntervalDays} days*`;
+          }
+          upcomingText += `• **${t.title}** - due in \`${daysLeft} days\` (${t.deadline.toLocaleDateString()})${reminderInfo}\n`;
         });
       }
       embed.addFields({ name: '⏳ Upcoming Deadlines (Next 7 Days)', value: upcomingText, inline: false });

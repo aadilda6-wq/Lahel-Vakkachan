@@ -17,7 +17,8 @@ module.exports = {
           { name: 'Daily Summary', value: 'Daily' },
           { name: 'Weekly Productivity', value: 'Weekly' },
           { name: 'Monthly Review', value: 'Monthly' },
-          { name: 'Team Stats', value: 'Stats' }
+          { name: 'Team Stats', value: 'Stats' },
+          { name: 'Task Status Report', value: 'Status' }
         )
     ),
 
@@ -44,6 +45,26 @@ module.exports = {
       } else if (type === 'Monthly') {
         startDate = new Date(now);
         startDate.setMonth(now.getMonth() - 1);
+      }
+
+      // If we are doing Status, generate the Task Status Report
+      if (type === 'Status') {
+        const embed = await generateTaskStatusReportEmbed(guildId);
+        
+        // Send to report channel if configured
+        const settings = await Team.findOne({ guildId });
+        if (settings && settings.reportChannelId) {
+          try {
+            const reportChannel = await interaction.guild.channels.fetch(settings.reportChannelId);
+            if (reportChannel) {
+              await reportChannel.send({ embeds: [embed] });
+            }
+          } catch (err) {
+            logger.warn(`Failed to send report to configured reports channel: ${err.message}`);
+          }
+        }
+
+        return interaction.reply({ embeds: [embed] });
       }
 
       // If we are doing Stats, we can calculate overall metrics
@@ -177,4 +198,189 @@ module.exports = {
       return interaction.reply({ content: '❌ There was an error compiling this report.', ephemeral: true });
     }
   }
+};
+
+async function getCompletedTasks(guildId) {
+  return await Task.find({
+    guildId,
+    status: 'Completed'
+  }).sort({ updatedAt: -1 });
+}
+
+async function getPendingTasks(guildId, now = new Date()) {
+  return await Task.find({
+    guildId,
+    status: 'Pending',
+    deadline: { $gte: now }
+  }).sort({ deadline: 1 });
+}
+
+async function getInProgressTasks(guildId, now = new Date()) {
+  return await Task.find({
+    guildId,
+    status: 'In Progress',
+    deadline: { $gte: now }
+  }).sort({ deadline: 1 });
+}
+
+async function getOverdueTasks(guildId, now = new Date()) {
+  return await Task.find({
+    guildId,
+    status: { $ne: 'Completed' },
+    deadline: { $lt: now }
+  }).sort({ deadline: 1 });
+}
+
+async function generateTaskStatusReportEmbed(guildId) {
+  const now = new Date();
+  const completed = await getCompletedTasks(guildId);
+  const pending = await getPendingTasks(guildId, now);
+  const inProgress = await getInProgressTasks(guildId, now);
+  const overdue = await getOverdueTasks(guildId, now);
+
+  const total = completed.length + pending.length + inProgress.length + overdue.length;
+  
+  let completedPct = 0;
+  let pendingPct = 0;
+  let inProgressPct = 0;
+  let overduePct = 0;
+  let completionRate = 0;
+
+  if (total > 0) {
+    completedPct = Math.round((completed.length / total) * 100);
+    pendingPct = Math.round((pending.length / total) * 100);
+    inProgressPct = Math.round((inProgress.length / total) * 100);
+    overduePct = Math.round((overdue.length / total) * 100);
+    completionRate = completedPct;
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle('📋 Task Status Report')
+    .setColor('#00ff77')
+    .setDescription('━━━━━━━━━━━━━━━━━━━━')
+    .addFields(
+      {
+        name: '📊 Summary',
+        value: `Total Tasks: **${total}**\n` +
+          `✅ Completed: **${completed.length}** (${completedPct}%)\n` +
+          `🟡 Pending: **${pending.length}** (${pendingPct}%)\n` +
+          `🔵 In Progress: **${inProgress.length}** (${inProgressPct}%)\n` +
+          `🔴 Overdue: **${overdue.length}** (${overduePct}%)\n\n` +
+          `Completion Rate: **${completionRate}%**`
+      },
+      {
+        name: '\u200B',
+        value: '━━━━━━━━━━━━━━━━━━━━'
+      }
+    )
+    .setTimestamp();
+
+  const getAssigneesText = (task) => {
+    if (!task.assignees || task.assignees.length === 0) return 'Unassigned';
+    return task.assignees.map(a => a.type === 'user' ? `<@${a.id}>` : `<@&${a.id}>`).join(', ');
+  };
+
+  // 1. Completed Tasks Section
+  let completedText = '';
+  if (completed.length === 0) {
+    completedText = 'No completed tasks.';
+  } else {
+    const list = completed.slice(0, 10);
+    completedText = list.map(t => {
+      const compAction = t.history
+        .filter(h => h.action.includes('Completed'))
+        .sort((a, b) => b.date - a.date)[0];
+      const completedBy = compAction ? (compAction.performedByName || `<@${compAction.performedBy}>`) : 'Unknown';
+      const compDate = compAction ? compAction.date : t.updatedAt;
+      const dateStr = compDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      return `• **${t.title}**\n👤 ${completedBy}\n✔ Completed on: ${dateStr}\nReason: Task marked as Completed.`;
+    }).join('\n\n');
+
+    if (completed.length > 10) {
+      completedText += `\n\n*...and ${completed.length - 10} more*`;
+    }
+  }
+  embed.addFields(
+    { name: `✅ Completed (${completed.length})`, value: completedText },
+    { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━' }
+  );
+
+  // 2. Pending Tasks Section
+  let pendingText = '';
+  if (pending.length === 0) {
+    pendingText = 'No pending tasks.';
+  } else {
+    const list = pending.slice(0, 10);
+    pendingText = list.map(t => {
+      const unix = Math.floor(t.deadline.getTime() / 1000);
+      const intervalText = t.reminderIntervalDays ? `Every ${t.reminderIntervalDays} days` : 'None';
+      const lastSentText = t.lastReminderSent ? `<t:${Math.floor(t.lastReminderSent.getTime() / 1000)}:R>` : 'Never';
+      return `• **${t.title}**\n👤 ${getAssigneesText(t)}\n📅 Due: <t:${unix}:d> (<t:${unix}:R>)\n🔔 Reminder Interval: ${intervalText}\n⏮ Last Sent: ${lastSentText}\nReason: Task has not been started yet.`;
+    }).join('\n\n');
+
+    if (pending.length > 10) {
+      pendingText += `\n\n*...and ${pending.length - 10} more*`;
+    }
+  }
+  embed.addFields(
+    { name: `🟡 Pending (${pending.length})`, value: pendingText },
+    { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━' }
+  );
+
+  // 3. In Progress Tasks Section
+  let inProgressText = '';
+  if (inProgress.length === 0) {
+    inProgressText = 'No tasks in progress.';
+  } else {
+    const list = inProgress.slice(0, 10);
+    inProgressText = list.map(t => {
+      const unix = Math.floor(t.deadline.getTime() / 1000);
+      const intervalText = t.reminderIntervalDays ? `Every ${t.reminderIntervalDays} days` : 'None';
+      const lastSentText = t.lastReminderSent ? `<t:${Math.floor(t.lastReminderSent.getTime() / 1000)}:R>` : 'Never';
+      return `• **${t.title}**\n👤 ${getAssigneesText(t)}\n📅 Due: <t:${unix}:d> (<t:${unix}:R>)\n🔔 Reminder Interval: ${intervalText}\n⏮ Last Sent: ${lastSentText}\nReason: Work has started but is not yet finished.`;
+    }).join('\n\n');
+
+    if (inProgress.length > 10) {
+      inProgressText += `\n\n*...and ${inProgress.length - 10} more*`;
+    }
+  }
+  embed.addFields(
+    { name: `🔵 In Progress (${inProgress.length})`, value: inProgressText },
+    { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━' }
+  );
+
+  // 4. Overdue Tasks Section
+  let overdueText = '';
+  if (overdue.length === 0) {
+    overdueText = 'No overdue tasks.';
+  } else {
+    const list = overdue.slice(0, 10);
+    overdueText = list.map(t => {
+      const unix = Math.floor(t.deadline.getTime() / 1000);
+      const diffMs = now.getTime() - t.deadline.getTime();
+      const overdueDays = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      const lastSentText = t.lastReminderSent ? `<t:${Math.floor(t.lastReminderSent.getTime() / 1000)}:R>` : 'Never';
+      return `• **${t.title}**\n👤 ${getAssigneesText(t)}\n❗ Due: <t:${unix}:d> (<t:${unix}:R>)\n📅 Overdue: ${overdueDays} days\n⏮ Last Sent: ${lastSentText}\nReason: Deadline has passed and the task is still incomplete.`;
+    }).join('\n\n');
+
+    if (overdue.length > 10) {
+      overdueText += `\n\n*...and ${overdue.length - 10} more*`;
+    }
+  }
+  embed.addFields(
+    { name: `🔴 Overdue (${overdue.length})`, value: overdueText },
+    { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━' }
+  );
+
+  return embed;
+}
+
+module.exports = {
+  data: module.exports.data,
+  execute: module.exports.execute,
+  getCompletedTasks,
+  getPendingTasks,
+  getInProgressTasks,
+  getOverdueTasks,
+  generateTaskStatusReportEmbed
 };

@@ -49,6 +49,14 @@ const taskSchema = new mongoose.Schema({
   creatorId: {
     type: String,
     required: true
+  },
+  reminderIntervalDays: {
+    type: Number,
+    default: null
+  },
+  lastReminderSent: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true
