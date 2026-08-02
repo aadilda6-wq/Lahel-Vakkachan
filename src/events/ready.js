@@ -2,7 +2,7 @@ const { ActivityType } = require('discord.js');
 const logger = require('../utils/logger');
 
 module.exports = {
-  name: 'ready',
+  name: 'clientReady',
   once: true,
   execute(client) {
     logger.info(`Ready! Logged in as ${client.user.tag}`);
