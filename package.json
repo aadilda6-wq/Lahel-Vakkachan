@@ -1,0 +1,28 @@
+{
+  "name": "lahel-vakkachan",
+  "version": "1.0.0",
+  "description": "A production-ready Discord bot for team task management, smart reminders, and meeting scheduling.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deployCommands.js",
+    "test": "echo \"Error: no test specified\" && exit 0"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "task-manager",
+    "google-calendar",
+    "node-cron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "googleapis": "^140.0.0",
+    "mongoose": "^8.5.1",
+    "node-cron": "^3.0.3",
+    "winston": "^3.13.0"
+  }
+}
