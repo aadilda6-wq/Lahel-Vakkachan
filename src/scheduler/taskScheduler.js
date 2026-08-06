@@ -4,13 +4,22 @@ const Team = require('../models/team');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 
+let isTaskSchedulerRunning = false;
+
 function initTaskScheduler(client) {
   // Run every minute server local time to evaluate reminder intervals
   cron.schedule('* * * * *', async () => {
+    if (isTaskSchedulerRunning) {
+      logger.warn('Task Scheduler run skipped: previous run still in progress.');
+      return;
+    }
+    isTaskSchedulerRunning = true;
     try {
       await checkTaskReminders(client);
     } catch (err) {
       logger.error('Error during minutely Task Scheduler execution:', err);
+    } finally {
+      isTaskSchedulerRunning = false;
     }
   });
   logger.info('Task Scheduler cron job registered.');

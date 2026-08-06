@@ -58,17 +58,9 @@ for (const file of eventFiles) {
     initReportScheduler(client);
     initCleanupScheduler();
 
-    // 3. Start a dummy HTTP server for health checks on Render/Railway if PORT is provided
-    const port = config.app.port || process.env.PORT;
-    if (port) {
-      const http = require('http');
-      http.createServer((req, res) => {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('Lahel Vakkachan Bot is running successfully.\n');
-      }).listen(port, () => {
-        logger.info(`Health check HTTP server is listening on port ${port}`);
-      });
-    }
+    // 3. Start Express server
+    require('./src/server');
+
 
     // 4. Login Bot to Discord Gateway
     if (!config.discord.token) {

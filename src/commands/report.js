@@ -69,16 +69,18 @@ module.exports = {
 
       // If we are doing Stats, we can calculate overall metrics
       if (type === 'Stats') {
-        const totalTasks = await Task.countDocuments({ guildId });
-        const completedTasks = await Task.countDocuments({ guildId, status: 'Completed' });
-        const pendingTasks = await Task.countDocuments({ guildId, status: 'Pending' });
-        const inProgressTasks = await Task.countDocuments({ guildId, status: 'In Progress' });
-        const overdueTasks = await Task.countDocuments({ guildId, status: 'Overdue' });
+        const [totalTasks, completedTasks, pendingTasks, inProgressTasks, overdueTasks] = await Promise.all([
+          Task.countDocuments({ guildId }),
+          Task.countDocuments({ guildId, status: 'Completed' }),
+          Task.countDocuments({ guildId, status: 'Pending' }),
+          Task.countDocuments({ guildId, status: 'In Progress' }),
+          Task.countDocuments({ guildId, status: 'Overdue' })
+        ]);
 
-        const completionRate = totalTasks > 0 ? ((completedCount = completedTasks / totalTasks) * 100).toFixed(1) : 0;
+        const completionRate = totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) : 0;
 
         // Fetch productivity per member (Completed tasks count)
-        const allCompleted = await Task.find({ guildId, status: 'Completed' });
+        const allCompleted = await Task.find({ guildId, status: 'Completed' }).lean();
         const contributorStats = {};
         allCompleted.forEach(t => {
           t.assignees.forEach(a => {
@@ -113,30 +115,26 @@ module.exports = {
       }
 
       // For Daily/Weekly/Monthly reports:
-      // Fetch tasks completed during the duration
-      const completedThisPeriod = await Task.countDocuments({
-        guildId,
-        status: 'Completed',
-        updatedAt: { $gte: startDate }
-      });
-
-      // Fetch tasks created during the duration
-      const createdThisPeriod = await Task.find({
-        guildId,
-        createdAt: { $gte: startDate }
-      });
-
-      // Fetch currently overdue tasks
-      const overdueTasks = await Task.find({
-        guildId,
-        status: 'Overdue'
-      });
-
-      // Fetch meetings scheduled during this period
-      const meetingsThisPeriod = await Meeting.find({
-        guildId,
-        startTime: { $gte: startDate }
-      }).sort({ startTime: 1 });
+      // Fetch tasks and meetings concurrently using lean() for read-only document lists
+      const [completedThisPeriod, createdThisPeriod, overdueTasks, meetingsThisPeriod] = await Promise.all([
+        Task.countDocuments({
+          guildId,
+          status: 'Completed',
+          updatedAt: { $gte: startDate }
+        }),
+        Task.find({
+          guildId,
+          createdAt: { $gte: startDate }
+        }).lean(),
+        Task.find({
+          guildId,
+          status: 'Overdue'
+        }).lean(),
+        Meeting.find({
+          guildId,
+          startTime: { $gte: startDate }
+        }).sort({ startTime: 1 }).lean()
+      ]);
 
       const embed = new EmbedBuilder()
         .setTitle(`📊 On-Demand ${type} Report Summary`)
@@ -204,7 +202,7 @@ async function getCompletedTasks(guildId) {
   return await Task.find({
     guildId,
     status: 'Completed'
-  }).sort({ updatedAt: -1 });
+  }).sort({ updatedAt: -1 }).lean();
 }
 
 async function getPendingTasks(guildId, now = new Date()) {
@@ -212,7 +210,7 @@ async function getPendingTasks(guildId, now = new Date()) {
     guildId,
     status: 'Pending',
     deadline: { $gte: now }
-  }).sort({ deadline: 1 });
+  }).sort({ deadline: 1 }).lean();
 }
 
 async function getInProgressTasks(guildId, now = new Date()) {
@@ -220,7 +218,7 @@ async function getInProgressTasks(guildId, now = new Date()) {
     guildId,
     status: 'In Progress',
     deadline: { $gte: now }
-  }).sort({ deadline: 1 });
+  }).sort({ deadline: 1 }).lean();
 }
 
 async function getOverdueTasks(guildId, now = new Date()) {
@@ -228,7 +226,7 @@ async function getOverdueTasks(guildId, now = new Date()) {
     guildId,
     status: { $ne: 'Completed' },
     deadline: { $lt: now }
-  }).sort({ deadline: 1 });
+  }).sort({ deadline: 1 }).lean();
 }
 
 async function generateTaskStatusReportEmbed(guildId) {

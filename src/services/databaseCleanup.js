@@ -22,14 +22,14 @@ async function runDatabaseCleanup() {
     const tasksToArchive = await Task.find({
       status: 'Completed',
       updatedAt: { $lt: sixMonthsAgo }
-    });
+    }).lean();
 
     if (tasksToArchive.length > 0) {
       logger.info(`Database Cleanup: Found ${tasksToArchive.length} completed tasks older than 6 months to archive.`);
 
       await session.withTransaction(async () => {
         const archivedDocs = tasksToArchive.map(task => {
-          const obj = task.toObject();
+          const obj = { ...task };
           obj._id = task._id; // Keep original ID
           obj.archivedAt = new Date();
           return obj;

@@ -24,10 +24,6 @@ module.exports = {
     uri: process.env.MONGODB_URI
   },
   google: {
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    privateKey: process.env.GOOGLE_PRIVATE_KEY 
-      ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') 
-      : null,
     calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary'
   },
   app: {

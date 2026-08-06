@@ -24,26 +24,27 @@ module.exports = {
       const endOfToday = new Date();
       endOfToday.setHours(23, 59, 59, 999);
 
-      const todaysMeetings = await Meeting.find({
-        guildId,
-        startTime: { $gte: startOfToday, $lte: endOfToday }
-      }).sort({ startTime: 1 });
-
-      // 3. High/Critical priority pending/in progress tasks
-      const highPriorityTasks = await Task.find({
-        guildId,
-        priority: { $in: ['High', 'Critical'] },
-        status: { $in: ['Pending', 'In Progress', 'Overdue'] }
-      }).limit(5);
-
-      // 4. Upcoming deadlines in next 7 days (not completed)
+      // 3. Upcoming deadlines in next 7 days (not completed)
       const next7Days = new Date();
       next7Days.setDate(next7Days.getDate() + 7);
-      const upcomingTasks = await Task.find({
-        guildId,
-        status: { $in: ['Pending', 'In Progress'] },
-        deadline: { $gte: new Date(), $lte: next7Days }
-      }).sort({ deadline: 1 }).limit(5);
+
+      // Run read-only MongoDB queries concurrently with lean() optimization
+      const [todaysMeetings, highPriorityTasks, upcomingTasks] = await Promise.all([
+        Meeting.find({
+          guildId,
+          startTime: { $gte: startOfToday, $lte: endOfToday }
+        }).sort({ startTime: 1 }).lean(),
+        Task.find({
+          guildId,
+          priority: { $in: ['High', 'Critical'] },
+          status: { $in: ['Pending', 'In Progress', 'Overdue'] }
+        }).limit(5).lean(),
+        Task.find({
+          guildId,
+          status: { $in: ['Pending', 'In Progress'] },
+          deadline: { $gte: new Date(), $lte: next7Days }
+        }).sort({ deadline: 1 }).limit(5).lean()
+      ]);
 
       const embed = new EmbedBuilder()
         .setTitle('📊 Team Activity & Metrics Dashboard')

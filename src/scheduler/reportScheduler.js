@@ -41,7 +41,7 @@ function initReportScheduler(client) {
 
 async function generateAutomatedReports(client, type) {
   // Find all guilds that have configured report channels
-  const settingsList = await Team.find({ reportChannelId: { $ne: null } });
+  const settingsList = await Team.find({ reportChannelId: { $ne: null } }).lean();
 
   for (const settings of settingsList) {
     try {
@@ -64,30 +64,26 @@ async function generateAutomatedReports(client, type) {
 
       const guildId = settings.guildId;
 
-      // 1. Tasks completed during this period
-      const completedCount = await Task.countDocuments({
-        guildId,
-        status: 'Completed',
-        updatedAt: { $gte: startDate }
-      });
-
-      // 2. Tasks registered during this period
-      const createdTasks = await Task.find({
-        guildId,
-        createdAt: { $gte: startDate }
-      });
-
-      // 3. Current overdue tasks
-      const overdueCount = await Task.countDocuments({
-        guildId,
-        status: 'Overdue'
-      });
-
-      // 4. Meetings schedule during this period
-      const meetings = await Meeting.find({
-        guildId,
-        startTime: { $gte: startDate }
-      }).sort({ startTime: 1 });
+      // Fetch report metrics and lists concurrently with lean() optimization
+      const [completedCount, createdTasks, overdueCount, meetings] = await Promise.all([
+        Task.countDocuments({
+          guildId,
+          status: 'Completed',
+          updatedAt: { $gte: startDate }
+        }),
+        Task.find({
+          guildId,
+          createdAt: { $gte: startDate }
+        }).lean(),
+        Task.countDocuments({
+          guildId,
+          status: 'Overdue'
+        }),
+        Meeting.find({
+          guildId,
+          startTime: { $gte: startDate }
+        }).sort({ startTime: 1 }).lean()
+      ]);
 
       const embed = new EmbedBuilder()
         .setTitle(`📊 Scheduled ${type} Activity Report`)

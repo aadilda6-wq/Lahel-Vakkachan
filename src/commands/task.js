@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const mongoose = require('mongoose');
 const Task = require('../models/task');
 const Team = require('../models/team');
 const { getMemberPermissions } = require('../middleware/permissionHandler');
@@ -116,7 +117,7 @@ module.exports = {
         query.title = { $regex: focusedValue, $options: 'i' };
       }
 
-      const tasks = await Task.find(query).limit(25);
+      const tasks = await Task.find(query).limit(25).lean();
       await interaction.respond(
         tasks.map(task => ({
           name: `${task.title.substring(0, 50)} [${task.priority}] (${task.status})`,
@@ -155,9 +156,17 @@ module.exports = {
         const assigneeRole = interaction.options.getRole('assignee-role');
         const reminderInterval = interaction.options.getInteger('reminder-interval') || null;
 
+        if (!title || title.trim().length === 0) {
+          return interaction.reply({ content: '❌ Task title cannot be empty.', ephemeral: true });
+        }
+
         const deadline = new Date(deadlineStr);
         if (isNaN(deadline.getTime())) {
           return interaction.reply({ content: '❌ Invalid deadline date format. Please use YYYY-MM-DD (e.g., 2026-08-15).', ephemeral: true });
+        }
+
+        if (deadline.getTime() < Date.now()) {
+          return interaction.reply({ content: '❌ You cannot set a deadline in the past.', ephemeral: true });
         }
 
         // Set assignee
@@ -227,6 +236,10 @@ module.exports = {
         const newPriority = interaction.options.getString('priority');
         const progressNote = interaction.options.getString('progress-note');
         const newReminderInterval = interaction.options.getInteger('reminder-interval');
+
+        if (!mongoose.Types.ObjectId.isValid(taskId)) {
+          return interaction.reply({ content: '❌ Invalid task ID format.', ephemeral: true });
+        }
 
         const task = await Task.findOne({ _id: taskId, guildId });
         if (!task) {
@@ -313,6 +326,11 @@ module.exports = {
 
       if (subcommand === 'complete') {
         const taskId = interaction.options.getString('task-id');
+
+        if (!mongoose.Types.ObjectId.isValid(taskId)) {
+          return interaction.reply({ content: '❌ Invalid task ID format.', ephemeral: true });
+        }
+
         const task = await Task.findOne({ _id: taskId, guildId });
         if (!task) {
           return interaction.reply({ content: '❌ Task not found.', ephemeral: true });
@@ -368,6 +386,11 @@ module.exports = {
 
       if (subcommand === 'view') {
         const taskId = interaction.options.getString('task-id');
+
+        if (!mongoose.Types.ObjectId.isValid(taskId)) {
+          return interaction.reply({ content: '❌ Invalid task ID format.', ephemeral: true });
+        }
+
         const task = await Task.findOne({ _id: taskId, guildId });
         if (!task) {
           return interaction.reply({ content: '❌ Task not found.', ephemeral: true });
@@ -422,6 +445,11 @@ module.exports = {
         }
 
         const taskId = interaction.options.getString('task-id');
+
+        if (!mongoose.Types.ObjectId.isValid(taskId)) {
+          return interaction.reply({ content: '❌ Invalid task ID format.', ephemeral: true });
+        }
+
         const task = await Task.findOneAndDelete({ _id: taskId, guildId });
         if (!task) {
           return interaction.reply({ content: '❌ Task not found.', ephemeral: true });
@@ -470,7 +498,7 @@ module.exports = {
           ];
         }
 
-        const tasks = await Task.find(query).sort({ deadline: 1 });
+        const tasks = await Task.find(query).sort({ deadline: 1 }).lean();
 
         if (tasks.length === 0) {
           return interaction.reply({ content: 'ℹ️ No tasks found matching the criteria.' });
